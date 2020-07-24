@@ -8,16 +8,6 @@ namespace ImageVisualizer
 {
     public class ImageVisualizerObjectSource : VisualizerObjectSource
     {
-        public override void GetData(object target, Stream outgoingData)
-        {
-            if (target is SoftwareBitmap softwareBitmap)
-            {
-                base.GetData(new SerializableBitmapImage(softwareBitmap), outgoingData);
-            }
-            else if (target is ImageSource image)
-                base.GetData(new SerializableBitmapImage((BitmapSource)image), outgoingData);
-            else
-                base.GetData(target, outgoingData);
-        }
+        public override void GetData(object target, Stream outgoingData) => base.GetData(Serializer.From(target), outgoingData);
     }
 }

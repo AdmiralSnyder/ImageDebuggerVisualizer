@@ -16,7 +16,7 @@ using Windows.Graphics.Imaging;
 //System.Windows.Media.ImageSource, System.Windows.Media.Imaging.BitmapImage, System.Windows.Media.Imaging.BitmapSource
 [assembly: System.Diagnostics.DebuggerVisualizer(typeof(ImageVisualizer.ImageDebuggerVisualizer), typeof(ImageVisualizerObjectSource), Target = typeof(System.Windows.Media.ImageSource), Description = "Image Visualizer")]
 //Windows.Graphics.Imaging.SoftwareBitmap
-[assembly: System.Diagnostics.DebuggerVisualizer(typeof(ImageVisualizer.ImageDebuggerVisualizer), typeof(ImageVisualizerObjectSource), Target = typeof(SoftwareBitmap), Description = "Image Visualizer")]
+[assembly: System.Diagnostics.DebuggerVisualizer(typeof(ImageVisualizer.ImageDebuggerVisualizer), typeof(ImageVisualizerObjectSource), Target = typeof(Windows.Graphics.Imaging.SoftwareBitmap), Description = "Image Visualizer")]
 
 namespace ImageVisualizer
 {
@@ -37,9 +37,9 @@ namespace ImageVisualizer
     {
         protected override void Show(IDialogVisualizerService windowService, IVisualizerObjectProvider objectProvider)
         {
-            if (windowService == null)
+            if (windowService is null)
                 throw new ArgumentNullException("windowService");
-            if (objectProvider == null)
+            if (objectProvider is null)
                 throw new ArgumentNullException("objectProvider");
 
             
@@ -49,12 +49,8 @@ namespace ImageVisualizer
             //rootFrame.Content = page;
 
             using (DpiAwareness.EnterDpiScope(DpiAwarenessContext.SystemAware))
-
-
-            
             using (var imageForm = new ImageForm(objectProvider))
             {
-
                 windowService.ShowDialog(imageForm);
             }
         }
@@ -70,7 +66,7 @@ namespace ImageVisualizer
         public static void TestShowVisualizer(object objectToVisualize)
         {
             var visualizerHost = new VisualizerDevelopmentHost(objectToVisualize, typeof(ImageDebuggerVisualizer), typeof(ImageVisualizerObjectSource));
-            var t = new Thread((ThreadStart)(() => visualizerHost.ShowVisualizer()));
+            var t = new Thread(() => visualizerHost.ShowVisualizer());
             t.SetApartmentState(ApartmentState.STA);
             t.Start();
             t.Join();

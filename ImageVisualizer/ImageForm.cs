@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
@@ -10,6 +12,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Toolkit.Forms.UI.XamlHost;
 using Microsoft.VisualStudio.DebuggerVisualizers;
+using Windows.Graphics.Imaging;
 
 namespace ImageVisualizer
 {
@@ -23,21 +26,7 @@ namespace ImageVisualizer
         {
             get
             {
-//#if VS10
-//                var dteProgID = "VisualStudio.DTE.10.0";
-//#elif VS11
-//                var dteProgID = "VisualStudio.DTE.11.0";
-//#elif VS12
-//                var dteProgID = "VisualStudio.DTE.12.0";
-//#elif VS13
-//                var dteProgID = "VisualStudio.DTE.13.0";
-//#elif VS14
-//                var dteProgID = "VisualStudio.DTE.14.0";
-//#elif VS15
-//                var dteProgID = "VisualStudio.DTE.15.0";
-//#elif VS16
                 var dteProgID = "VisualStudio.DTE.16.0";
-//#endif
                 var dte = (EnvDTE.DTE)Marshal.GetActiveObject(dteProgID);
                 var fontProperty = dte.Properties["FontsAndColors", "Dialogs and Tool Windows"];
                 if (fontProperty != null)
@@ -55,27 +44,37 @@ namespace ImageVisualizer
             }
         }
 
+        public Dictionary<Type, Func<ImageUserControl>> ImageControls = new Dictionary<Type, Func<ImageUserControl>>
+        {
+            [typeof(System.Drawing.Image)] = () => new GdiImageControl(),
+            [typeof(System.Windows.Media.ImageSource)] = () => new WpfImageControl(),
+            [typeof(Windows.Graphics.Imaging.SoftwareBitmap)] = () => new UwpImageControl(),
+        };
+
         public ImageForm(IVisualizerObjectProvider objectProvider)
         {
             InitializeComponent();
 
-            var uwphost = new WindowsXamlHost();
-            uwphost.Parent = UwpTP;
-            uwphost.InitialTypeName = "Windows.UI.Xaml.Controls.CalendarView";
-
 #if DEBUG
-            this.ShowInTaskbar = true;
+            ShowInTaskbar = true;
 #endif
 
-            this.label1.Font = UIFont;
-            SetFontAndScale(this.label1, UIFont);
-            this.label2.Font = UIFont;
-            this.txtExpression.Font = UIFont;
-            this.btnClose.Font = UIFont;
+            label1.Font = UIFont;
+            SetFontAndScale(label1, UIFont);
+            label2.Font = UIFont;
+            txtExpression.Font = UIFont;
+            CloseB.Font = UIFont;
 
             object objectBitmap = objectProvider.GetObject();
+
+            object image = null;
+
             if (objectBitmap != null)
-            {
+            {            
+                if (objectBitmap is ByteArraySerializableWrapper<SoftwareBitmap> wrapper)
+                {
+                    image = Serializer.ToSoftwareBitmap(wrapper.Bytes);
+                }
 #if DEBUG
                 string expression = objectBitmap.ToString();
 #endif
@@ -90,26 +89,29 @@ namespace ImageVisualizer
 
                 if (objectBitmap is Bitmap)
                 {
-                    var hObject = ((Bitmap)objectBitmap).GetHbitmap();
+                    image = objectBitmap;
+                    //var hObject = ((Bitmap)objectBitmap).GetHbitmap();
 
-                    try
-                    {
-                        bitmapSource = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(
-                               hObject,
-                               IntPtr.Zero,
-                               Int32Rect.Empty,
-                               BitmapSizeOptions.FromEmptyOptions());
-                    }
-                    catch (Win32Exception)
-                    {
-                        bitmapSource = null;
-                    }
-                    finally
-                    {
-                        DeleteObject(hObject);
-                    }
+                    //try
+                    //{
+                    //    bitmapSource = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(
+                    //           hObject,
+                    //           IntPtr.Zero,
+                    //           Int32Rect.Empty,
+                    //           BitmapSizeOptions.FromEmptyOptions());
+                    //    image = bitmapSource;
+                    //}
+                    //catch (Win32Exception)
+                    //{
+                    //    bitmapSource = null;
+                    //}
+                    //finally
+                    //{
+                    //    DeleteObject(hObject);
+                    //}
                 }
-                else if (objectBitmap is SerializableBitmapImage serializableBitmapImage)
+                else 
+                if (objectBitmap is SerializableBitmapImage serializableBitmapImage)
                 {
                     if (serializableBitmapImage.Image != null)
                     {
@@ -132,6 +134,7 @@ namespace ImageVisualizer
                             bitmap.EndInit();
                             bitmap.Freeze();
                             bitmapSource = bitmap;
+                            image = (ImageSource)bitmap;
                             // use bitmap
                         }
                         //using (var sb = serializableBitmapImage.SoftwareBitmap.LockBuffer())
@@ -148,11 +151,25 @@ namespace ImageVisualizer
                     }
                 }
 
-                if (bitmapSource != null)
+                //if (bitmapSource != null)
+                //{
+                //    imageControl.SetImage(bitmapSource);
+                //}
+
+                var type = image.GetType();
+                Func<ImageUserControl> factory = null;
+                while(type != null && !ImageControls.TryGetValue(type, out factory))
                 {
-                    imageControl.SetImage(bitmapSource);
+                    type = type.BaseType;
                 }
-            
+                if (factory is { })
+                {
+                    var imageControl = ImageControls[type]();
+                    imageControl.Parent = panel1;
+                    imageControl.Dock = DockStyle.Fill;
+                    imageControl.SetImage(image);
+                }
+
                 txtExpression.Text = objectBitmap.ToString();
             }
      
@@ -162,7 +179,7 @@ namespace ImageVisualizer
         {
             if (ModifierKeys == Keys.None && keyData == Keys.Escape)
             {
-                this.Close();
+                Close();
                 return true;
             }
 
@@ -180,9 +197,18 @@ namespace ImageVisualizer
             ctlControl.Scale(new SizeF(sngRatio, sngRatio));
         }
 
-        private void btnClose_Click(object sender, EventArgs e)
+        private void CloseB_Click(object sender, EventArgs e)
         {
-            this.Close();
+            var imageCtrl = panel1.Controls.OfType<Control>().FirstOrDefault();
+            if (imageCtrl is WpfImageControl wpfImageControl)
+            {
+                wpfImageControl.DoClose();
+
+                imageCtrl.Visible = false;
+                imageCtrl.Dispose();
+            }
+
+            Close();
         }
     }
 }
